@@ -6,31 +6,61 @@ later forget the reasoning for.
 
 ## Scope
 
-<!-- TODO: What will this server support, at minimum, to call step N "done"?
-     Be concrete: which commands, single-client or multi-client, in-memory
-     only or persisted to disk? Nail down what's explicitly OUT of scope too
-     (e.g. "no pub/sub for now", "no clustering", "no auth"). -->
+In scope, minimum to call this "done":
+- Commands: `GET`, `SET`, `DEL` (plus `EXISTS` if convenient) against an
+  in-memory string store.
+- Single client first (milestone 1), then multiple concurrent clients
+  (milestone 3).
+- A custom text protocol with unambiguous framing (milestone 2).
+- LRU eviction with a max store size (milestone 4).
+- In-memory only; disk persistence is a stretch goal (milestone 5), not
+  required for "done".
+
+Out of scope for now (may revisit later):
+- TTL/expiry on keys.
+- Non-string value types (lists, hashes, sets).
+- Auth, pub/sub, transactions, clustering/replication.
 
 ## Data model
 
-<!-- TODO: What value types does a key hold — just strings, or also lists/
-     hashes/sets like real Redis? Is there a TTL/expiry concept? -->
+- Keys and values are both strings (utf-8 bytes). No other value types for
+  now — real Redis's lists/hashes/sets are a possible future extension once
+  the core server works.
+- No TTL/expiry for now. Adding it later is a natural extension: a
+  background sweep or lazy-check-on-read against a stored expiry timestamp.
 
 ## Protocol
 
-<!-- TODO: How does a client talk to the server over the socket? Options to
-     consider (write down why you picked one): a simplified text protocol
-     you design yourself, or Redis's real RESP protocol. Each has different
-     tradeoffs for how much you learn about wire-protocol design vs. how
-     much prior art you can lean on. -->
+Decision: a custom text protocol, not RESP. Goal is to learn wire-protocol
+design by making the framing decisions myself, rather than implementing an
+existing spec.
+
+Framing plan (staged across milestones, so early framing bugs are cheap to
+hit and fix):
+- Milestone 1: one command per line, fields space-separated
+  (`SET key value\n`, `GET key\n`, `DEL key\n`). Simplest possible framing;
+  known limitation is that values can't contain spaces or newlines yet.
+- Milestone 2: replace the naive line format with explicit length-prefixed
+  values (e.g. `SET key <byte-length>\r\n<raw bytes>\r\n`) so a value can
+  contain arbitrary bytes, including spaces and newlines, without ambiguity.
+  This is the point of milestone 2: framing that doesn't rely on
+  newline-splitting alone.
 
 ## Architecture
 
-<!-- TODO: Once you have a few pieces, sketch how they call each other.
-     e.g. "TCP server accepts connections -> per-connection loop reads a
-     command -> command dispatched to the in-memory store -> response
-     written back over the socket". A rough diagram or a few bullet points
-     is enough. -->
+Decision: object-oriented design — classes rather than free functions
+operating on a plain dict. A natural split for milestone 1:
+- `Store` — owns the in-memory dict, exposes `get`/`set`/`delete`.
+- `Server` (or `Connection`/`ClientHandler`) — owns the socket, the
+  accept/read loop, and command parsing, and holds a reference to a `Store`.
+
+Rough flow stays the same: TCP server accepts a connection -> per-connection
+loop reads bytes into a buffer and splits on newlines to find complete
+commands -> each command is dispatched against the `Store` -> response
+written back over the same connection. Once milestone 3 adds concurrent
+clients, the `Store` (not the connection-handling classes) is where
+thread-safety needs to be addressed, since it's the shared state multiple
+handlers will touch at once.
 
 ## Milestones
 
@@ -58,9 +88,17 @@ later forget the reasoning for.
 
 <!-- Add an entry each time you make a non-obvious choice. Keep entries short. -->
 
-- YYYY-MM-DD: <!-- decision --> — because <!-- reasoning -->
+- 2026-08-18: Custom text protocol, not RESP — because the goal is to
+  practice wire-protocol design decisions myself rather than implement an
+  existing spec.
+- 2026-08-18: Strings-only data model, no TTL at start — because getting
+  the server/protocol/concurrency mechanics solid first matters more than
+  breadth of features; richer types and expiry are natural extensions once
+  the core loop works.
+- 2026-08-18: Object-oriented architecture (`Store`, `Server`/connection
+  classes) rather than free functions on a plain dict — user's preference
+  for how to organize the codebase as it grows across milestones.
 
 ## Open questions
 
-- Protocol design: not yet decided (see Protocol section above).
 - Concurrency model: threads vs. `asyncio` — not yet decided (see milestone 3).
