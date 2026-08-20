@@ -14,3 +14,15 @@ class Connection:
         line = self.buffer[:index]
         self.buffer = self.buffer[index+2:]
         return line
+
+
+    def read_exact(self, n):
+        while len(self.buffer) < n:
+            chunk = self.client_socket.recv(1024)
+            if not chunk:
+                raise ConnectionError("client disconnected")
+            self.buffer += chunk
+        value = self.buffer[:n]
+        self.buffer = self.buffer[n:]
+        return value
+

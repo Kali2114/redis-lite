@@ -1,4 +1,5 @@
 import socket
+from connection import Connection
 
 
 class Server:
@@ -9,17 +10,31 @@ class Server:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def handle_client(self, client_socket):
-        data = client_socket.recv(1024)
-        text = data.decode("utf-8").strip()
-        parts = text.split()
+        connection = Connection(client_socket)
+        line = connection.read_line()
+        parts = line.decode("utf-8").split()
         response = None
         if len(parts) == 2 and parts[0] == "GET":
             response = self.store.get(parts[1])
             if response is None:
                 response = "(nil)"
+            else:
+                response = response.encode("utf-8")
+                length = len(response)
+                length_prefix = f"{length}\r\n".encode("utf-8")
+                response = length_prefix + response
+                return response
         elif len(parts) == 3 and parts[0] == "SET":
-            self.store.set(parts[1], parts[2])
-            response = "OK"
+            length = int(parts[2])
+            value = connection.read_exact(length)
+            try:
+                value = value.decode("utf-8")
+            except UnicodeDecodeError:
+                response = "ERR invalid utf-8"
+            else:
+                connection.read_line()
+                self.store.set(parts[1], value)
+                response = "OK"
         elif len(parts) == 2 and parts[0] == "DEL":
             response = self.store.delete(parts[1])
             response = "1" if response else "0"

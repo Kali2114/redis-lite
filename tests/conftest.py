@@ -20,5 +20,15 @@ def server_port():
 
 def send_command(port, command, timeout=2):
     with socket.create_connection(("localhost", port), timeout=timeout) as client:
-        client.sendall(command.encode() + b"\n")
+        client.sendall(command.encode() + b"\r\n")
+        return client.recv(1024)
+
+
+def send_set_command(port, key, value, timeout=2):
+    value = value.encode(u"utf-8")
+    length = len(value)
+    line = f"SET {key} {length}\r\n".encode(u"utf-8")
+    with socket.create_connection(("localhost", port), timeout=timeout) as client:
+        payload = line + value + b"\r\n"
+        client.sendall(payload)
         return client.recv(1024)
