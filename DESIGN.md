@@ -67,6 +67,8 @@ handlers will touch at once.
 1. **Single-client TCP server** — plain socket server, one client at a time.
    - Done when: a client can connect and issue `GET`/`SET`/`DEL` against an
      in-memory dict, and get a response back over the same connection.
+   - Status: done — `Store` (store.py) and `Server` (server.py), covered by
+     the pytest suite in `tests/` (GET/SET/DEL, unknown and empty commands).
 2. **Custom text protocol** — define and parse your own command protocol
    (a simplified version of Redis's RESP is fine).
    - Done when: commands and responses are framed unambiguously (the parser
