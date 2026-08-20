@@ -1,3 +1,5 @@
+import threading
+import socket
 from tests.conftest import send_command, send_set_command
 
 
@@ -42,5 +44,43 @@ def test_get_value_with_embedded_newline(server_port):
     send_set_command(server_port, 'note', 'line one\r\nline two')
     response = send_command(server_port, 'GET note')
     assert response == b'18\r\nline one\r\nline two'
+
+
+def test_many_clients(server_port):
+    results = []
+
+    def worker(i):
+        key = f"key{i}"
+        value = f"value{i}"
+        send_set_command(server_port, key, value)
+        response = send_command(server_port, f'GET {key}')
+        results.append((i, response))
+
+    threads = []
+
+    for i in range(10):
+        thread = threading.Thread(target=worker, args=(i,))
+        threads.append(thread)
+
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(results) == 10
+    for i, response in results:
+        value = f"value{i}"
+        length = len(value.encode("utf-8"))
+        expected = f"{length}\r\n{value}"
+        expected = expected.encode("utf-8")
+        assert response == expected
+
+
+def test_idle_client_not_block_other(server_port):
+    idle_client = socket.create_connection(("localhost", server_port))
+    response = send_command(server_port, 'GET name')
+    idle_client.close()
+    assert response == b'(nil)\n'
+
 
 

@@ -1,16 +1,23 @@
+import threading
+
+
 class Store:
     def __init__(self):
         self.data = {}
+        self.lock = threading.Lock()
 
     def get(self, key):
-        return self.data.get(key)
+        with self.lock:
+            return self.data.get(key)
 
     def set(self, key, value):
-        self.data[key] = value
-        return True
+        with self.lock:
+            self.data[key] = value
+            return True
 
     def delete(self, key):
-        if key in self.data:
-            del self.data[key]
-            return True
-        return False
+        with self.lock:
+            if key in self.data:
+                del self.data[key]
+                return True
+            return False

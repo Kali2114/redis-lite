@@ -116,7 +116,14 @@ once.
   keeps `handle_client` focused on dispatch, not byte-level framing, and
   the two read primitives are reused for both `SET`'s request and `GET`'s
   response.
+- 2026-08-20: Threads (not `asyncio`) for milestone 3's concurrent clients
+  — the existing `Connection`/`Server` code is built around blocking
+  `recv()` calls, so a thread per accepted connection is a small diff
+  (spawn a thread, add a lock around `Store`) versus rewriting the I/O
+  model around coroutines. `asyncio` is thematically closer to how real
+  Redis achieves concurrency (single-threaded event loop, no locks), but
+  kept as a possible later stretch rather than done first.
 
 ## Open questions
 
-- Concurrency model: threads vs. `asyncio` — not yet decided (see milestone 3).
+None currently open.
