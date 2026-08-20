@@ -23,6 +23,11 @@ class Server:
         elif len(parts) == 2 and parts[0] == "DEL":
             response = self.store.delete(parts[1])
             response = "1" if response else "0"
+        if response is None:
+            if parts:
+                response = (f"{parts[0]} unknown command")
+            else:
+                response = "ERR empty command"
         response = str(response) + "\n"
         response = response.encode("utf-8")
         return response
