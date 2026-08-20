@@ -60,15 +60,16 @@ operating on a plain dict. Current split:
   parsing/dispatch; holds a reference to a `Store` and, per connection,
   builds a `Connection` to read requests through.
 
-Rough flow: TCP server accepts a connection -> `handle_client` uses a
-`Connection` to read one command line, then (for `SET`) the exact number of
-raw value bytes it declares -> the command is dispatched against the
-`Store` -> a response is written back over the same connection (for `GET`
-on an existing key, also length-prefixed, since the value may contain
-arbitrary bytes). Once milestone 3 adds concurrent clients, the `Store`
-(not the connection-handling classes) is where thread-safety needs to be
-addressed, since it's the shared state multiple handlers will touch at
-once.
+Rough flow: TCP server accepts a connection -> spawns a daemon thread
+running `handle_client`, which uses a `Connection` to read one command
+line, then (for `SET`) the exact number of raw value bytes it declares ->
+the command is dispatched against the `Store` (guarded by a lock, since
+it's shared across every connection's thread) -> a response is written
+back over the same connection (for `GET` on an existing key, also
+length-prefixed, since the value may contain arbitrary bytes) -> the
+socket is closed, whether the handler finished normally or the client
+disconnected mid-command (`handle_client` wraps its body in
+`try`/`except ConnectionError`/`finally: client_socket.close()`).
 
 ## Milestones
 
@@ -89,6 +90,11 @@ once.
    (threads or `asyncio`).
    - Done when: two clients connected at once can both `SET`/`GET` without
      one blocking or corrupting the other's view of the store.
+   - Status: done — `Server.start()` spawns a daemon thread per accepted
+     connection; `Store` holds a `threading.Lock` around `get`/`set`/`delete`.
+     Covered by `test_many_clients` (10 threads, distinct keys, no
+     corruption) and `test_idle_client_not_block_other` (an idle connection
+     doesn't stall a second client's response).
 4. **LRU eviction** — cap the store at a max size, evict least-recently-used
    keys when full.
    - Done when: you've benchmarked/tested that inserting past the cap evicts
