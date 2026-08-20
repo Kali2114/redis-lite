@@ -49,18 +49,26 @@ hit and fix):
 ## Architecture
 
 Decision: object-oriented design — classes rather than free functions
-operating on a plain dict. A natural split for milestone 1:
+operating on a plain dict. Current split:
 - `Store` — owns the in-memory dict, exposes `get`/`set`/`delete`.
-- `Server` (or `Connection`/`ClientHandler`) — owns the socket, the
-  accept/read loop, and command parsing, and holds a reference to a `Store`.
+- `Connection` — wraps a client socket with a byte buffer and two
+  primitives, `read_line()` (read up to `\r\n`) and `read_exact(n)` (read
+  exactly `n` raw bytes), both handling data arriving split across multiple
+  `recv()` calls, and raising `ConnectionError` if the client disconnects
+  mid-read instead of spinning forever.
+- `Server` — owns the listening socket, the accept loop, and command
+  parsing/dispatch; holds a reference to a `Store` and, per connection,
+  builds a `Connection` to read requests through.
 
-Rough flow stays the same: TCP server accepts a connection -> per-connection
-loop reads bytes into a buffer and splits on newlines to find complete
-commands -> each command is dispatched against the `Store` -> response
-written back over the same connection. Once milestone 3 adds concurrent
-clients, the `Store` (not the connection-handling classes) is where
-thread-safety needs to be addressed, since it's the shared state multiple
-handlers will touch at once.
+Rough flow: TCP server accepts a connection -> `handle_client` uses a
+`Connection` to read one command line, then (for `SET`) the exact number of
+raw value bytes it declares -> the command is dispatched against the
+`Store` -> a response is written back over the same connection (for `GET`
+on an existing key, also length-prefixed, since the value may contain
+arbitrary bytes). Once milestone 3 adds concurrent clients, the `Store`
+(not the connection-handling classes) is where thread-safety needs to be
+addressed, since it's the shared state multiple handlers will touch at
+once.
 
 ## Milestones
 
@@ -74,6 +82,9 @@ handlers will touch at once.
    - Done when: commands and responses are framed unambiguously (the parser
      knows where one command/response ends and the next begins) rather than
      relying on newline-splitting alone.
+   - Status: done — `Connection.read_line()`/`read_exact()` (connection.py);
+     `SET key <len>\r\n<raw bytes>\r\n` request and length-prefixed `GET`
+     response, covered by a test with an embedded `\r\n` in the value.
 3. **Concurrent clients** — handle multiple simultaneous connections
    (threads or `asyncio`).
    - Done when: two clients connected at once can both `SET`/`GET` without
@@ -100,6 +111,11 @@ handlers will touch at once.
 - 2026-08-18: Object-oriented architecture (`Store`, `Server`/connection
   classes) rather than free functions on a plain dict — user's preference
   for how to organize the codebase as it grows across milestones.
+- 2026-08-20: Split socket buffering into its own `Connection` class
+  (`read_line`/`read_exact`) rather than inlining recv-loops in `Server` —
+  keeps `handle_client` focused on dispatch, not byte-level framing, and
+  the two read primitives are reused for both `SET`'s request and `GET`'s
+  response.
 
 ## Open questions
 

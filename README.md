@@ -6,9 +6,10 @@ concurrency (as opposed to using a framework or an existing client library).
 
 ## Status
 
-Milestone 1 done: a single-client server (`Server` + `Store`) handling
-`GET`/`SET`/`DEL` over a plain newline-delimited protocol, with a pytest
-suite covering the happy paths plus unknown/empty commands. See
+Milestones 1 and 2 done: a server (`Server` + `Store` + `Connection`)
+handling `GET`/`SET`/`DEL` over a custom text protocol with explicit
+length-prefixed values, so a value can contain spaces or newlines. Covered
+by a pytest suite including a value with an embedded newline. See
 [DESIGN.md](DESIGN.md) for what's next.
 
 ## Why
@@ -28,16 +29,24 @@ from store import Store
 Server("127.0.0.1", 6380, Store()).start()
 ```
 
-Talk to it with any raw TCP client, one command per line:
+Talk to it with a raw TCP client. Requests/responses are `\r\n`-terminated
+lines; `SET`'s value and an existing `GET`'s value are length-prefixed so
+they can contain arbitrary bytes:
 
-```
-$ nc 127.0.0.1 6380
-SET name kamil
-OK
-GET name
-kamil
-DEL name
-1
+```python
+import socket
+
+with socket.create_connection(("127.0.0.1", 6380)) as s:
+    s.sendall(b"SET name 5\r\nkamil\r\n")
+    print(s.recv(1024))  # b'OK\n'
+
+with socket.create_connection(("127.0.0.1", 6380)) as s:
+    s.sendall(b"GET name\r\n")
+    print(s.recv(1024))  # b'5\r\nkamil'
+
+with socket.create_connection(("127.0.0.1", 6380)) as s:
+    s.sendall(b"DEL name\r\n")
+    print(s.recv(1024))  # b'1\n'
 ```
 
 Run the tests:
