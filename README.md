@@ -6,13 +6,15 @@ concurrency (as opposed to using a framework or an existing client library).
 
 ## Status
 
-Milestones 1–3 done: a server (`Server` + `Store` + `Connection`) handling
+Milestones 1–4 done: a server (`Server` + `Store` + `Connection`) handling
 `GET`/`SET`/`DEL` over a custom text protocol with explicit length-prefixed
 values (so a value can contain spaces or newlines), serving multiple
-clients concurrently on their own threads with a locked `Store`. Covered
-by a pytest suite, including a value with an embedded newline and a test
-proving an idle client doesn't stall another client's request. See
-[DESIGN.md](DESIGN.md) for what's next.
+clients concurrently on their own threads with a locked `Store`, which
+caps itself at a max size and evicts the least-recently-used key (a
+hand-rolled dict + doubly linked list) when full. Covered by a pytest
+suite, including a value with an embedded newline, a test proving an idle
+client doesn't stall another client's request, and a test proving eviction
+picks the right key. See [DESIGN.md](DESIGN.md) for what's next.
 
 ## Why
 
