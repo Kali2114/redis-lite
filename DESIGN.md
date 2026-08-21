@@ -100,6 +100,11 @@ disconnected mid-command (`handle_client` wraps its body in
    - Done when: you've benchmarked/tested that inserting past the cap evicts
      the correct key, and can explain the data structure choice (e.g. dict +
      doubly linked list vs. `OrderedDict`) and its complexity.
+   - Design: `Store(max_size=...)`; a dict (key -> node) for O(1) lookup
+     plus a hand-rolled doubly linked list for O(1) recency reordering.
+     `GET` and `SET` both move the accessed key to the most-recently-used
+     end; when `SET` would grow the store past `max_size`, the
+     least-recently-used end is evicted first.
 5. **(Stretch) Persistence** — snapshot the in-memory store to disk and
    reload it on restart, so a process crash doesn't lose all data.
 
@@ -129,6 +134,13 @@ disconnected mid-command (`handle_client` wraps its body in
   model around coroutines. `asyncio` is thematically closer to how real
   Redis achieves concurrency (single-threaded event loop, no locks), but
   kept as a possible later stretch rather than done first.
+- 2026-08-21: Milestone 4's LRU uses a hand-rolled dict + doubly linked
+  list, not `collections.OrderedDict` — `OrderedDict` would be less code
+  (built-in `move_to_end`/`popitem(last=False)`), but the point of this
+  project is building the mechanism yourself, matching the custom
+  protocol/`Connection` buffering decisions already made. Both `GET` and
+  `SET` mark a key as recently used (both are real accesses); `DEL` just
+  removes it, no recency update needed.
 
 ## Open questions
 
